@@ -1,6 +1,7 @@
 // ================================
 // server.js - Clothing Retail Leads App
 // ================================
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
@@ -8,10 +9,12 @@ const session = require('express-session');
 const cookieParser = require('cookie-parser');
 const passport = require('passport');
 const FacebookStrategy = require('passport-facebook').Strategy;
-require('dotenv').config();
 
 const app = express();
+
+// Use process.env.PORT for local, but Vercel manages this automatically in prod
 const PORT = process.env.PORT || 3001;
+// Update this in Vercel Env Variables to your Python Render URL
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:5000';
 
 // ================================
@@ -19,27 +22,33 @@ const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:5
 // ================================
 app.use(express.json());
 app.use(cookieParser());
-app.use(session({ secret: 'secret-key', resave: false, saveUninitialized: false }));
+
+// Production-ready session config
+app.use(session({ 
+  secret: process.env.SESSION_SECRET || 'signature-leads-secret', 
+  resave: false, 
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? 'none' : 'lax'
+  }
+}));
+
 app.use(passport.initialize());
 app.use(passport.session());
 
 const allowedOrigins = [
-  'http://localhost:5173',                  // Default Vite local development
-  'http://localhost:3000',                  // Alternative local port
-  'http://localhost:5000',                  //  PYTHON FLASK API PORT
-  'https://zetss125.github.io',             //  GitHub Pages production site
-  'https://signature-retail-app.onrender.com' //  ACTUAL PRODUCTION FRONTEND URL
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://zetss125.github.io',
+  'https://signature-retail-app.onrender.com'
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
       callback(null, true);
     } else {
-      console.log("CORS Blocked for origin:", origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -48,7 +57,7 @@ app.use(cors({
 }));
 
 // ================================
-// Mock Database
+// Mock Database (Note: Reset on every Vercel sleep)
 // ================================
 let leadsDatabase = [];
 
@@ -57,54 +66,72 @@ let leadsDatabase = [];
 // ================================
 async function getANNScore(location, platform, signals) {
   try {
-    // Ensure this matches your Python URL exactly
     const response = await axios.post(`${PYTHON_SERVICE_URL}/predict`, {
-      location: location,
-      platform: platform,
-      signals: signals // Already handled in Python if this is an array
-    }, { timeout: 3000 }); // Don't wait forever
-
+      location,
+      platform,
+      signals
+    }, { timeout: 3000 });
     return response.data; 
   } catch (error) {
-    // If you see this in the log, your Python server is either 
-    // down or crashing on the specific data sent.
-    console.error("⚠️ AI Engine Error:", error.response?.data || error.message);
+    console.error("⚠️ AI Engine Error:", error.message);
     return { score: 45, urgency: 'MEDIUM' };
   }
 }
 
-// Update the Facebook Callback URL for LOCAL development
+// ================================
+// Facebook Auth Configuration
+// ================================
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((obj, done) => done(null, obj));
+
+if (process.env.FB_APP_ID && process.env.FB_APP_SECRET) {
+  passport.use(new FacebookStrategy({
+      clientID: process.env.FB_APP_ID,
+      clientSecret: process.env.FB_APP_SECRET,
+      callbackURL: '/auth/facebook/callback',
+      profileFields: ['id', 'displayName', 'emails']
+    },
+    (accessToken, refreshToken, profile, done) => {
+      return done(null, { profile, accessToken });
+    }
+  ));
+}
+
+// ================================
+// Routes
+// ================================
+
+app.get('/', (req, res) => res.json({ message: "Retail AI API Live" }));
+
+app.get('/auth/facebook', passport.authenticate('facebook', { scope: ['email', 'user_posts'] }));
+
 app.get('/auth/facebook/callback', (req, res, next) => {
   passport.authenticate('facebook', (err, user) => {
-    // FIX: Remove the sub-path /moving-leads-app for local dev
-    const frontendUrl = 'http://localhost:5173'; 
+    // Redirect to production GitHub pages or local dev
+    const frontendUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://zetss125.github.io/retail-ai-leads' 
+      : 'http://localhost:5173';
+    
     if (err || !user) return res.redirect(`${frontendUrl}/login?error=auth_failed`);
     res.redirect(`${frontendUrl}/dashboard?token=${user.accessToken}`);
   })(req, res, next);
 });
 
-// Helper to create a retail lead (Used for both Mock and Real analysis)
 async function createRetailLead(name = "New Lead", email = null, platform = 'facebook') {
   const cities = ['New York', 'Austin', 'Paris', 'London', 'Toronto'];
   const items = ["Winter Coat", "Silk Dress", "Straight-leg Jeans", "Leather Boots", "Handbag"];
-  
   const randomItem = items[Math.floor(Math.random() * items.length)];
-  const rawSignals = [
-    `Added ${randomItem} to cart`,
-    `Asked for ${randomItem} sizing`,
-    `Saved ${randomItem} to wishlist`
-  ];
   const location = cities[Math.floor(Math.random() * cities.length)];
+  const rawSignals = [`Added ${randomItem} to cart`, `Saved ${randomItem} to wishlist`];
 
-  // Get the real score from the Python ANN model
   const aiResult = await getANNScore(location, platform, rawSignals);
 
   return {
     id: `lead-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-    name: name,
+    name,
     email: email || `customer${Math.floor(Math.random() * 9999)}@email.com`,
-    location: location,
-    platform: platform,
+    location,
+    platform,
     score: aiResult.score,
     signals: rawSignals,
     urgency: aiResult.urgency,
@@ -112,52 +139,19 @@ async function createRetailLead(name = "New Lead", email = null, platform = 'fac
   };
 }
 
-// ================================
-// Facebook Auth Routes
-// ================================
-passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((obj, done) => done(null, obj));
-
-passport.use(new FacebookStrategy({
-    clientID: process.env.FB_APP_ID,
-    clientSecret: process.env.FB_APP_SECRET,
-    callbackURL: '/auth/facebook/callback',
-    profileFields: ['id', 'displayName', 'emails']
-  },
-  (accessToken, refreshToken, profile, done) => {
-    return done(null, { profile, accessToken });
-  }
-));
-
-app.get('/auth/facebook', passport.authenticate('facebook', { scope: ['email', 'user_posts'] }));
-
-app.get('/auth/facebook/callback', (req, res, next) => {
-  passport.authenticate('facebook', (err, user) => {
-    const frontendUrl = 'http://localhost:5173/retail-ai-leads'; 
-    if (err || !user) return res.redirect(`${frontendUrl}?error=auth_failed`);
-    res.redirect(`${frontendUrl}?token=${user.accessToken}`);
-  })(req, res, next);
-});
-
-// ================================
-// Leads API (The Core Logic)
-// ================================
-
-// 1. Analyze specific lead (Mocking the process of pulling FB data)
 app.post('/api/analyze-facebook', async (req, res) => {
   try {
     const lead = await createRetailLead("Facebook User", "fb_user@example.com", "facebook");
-    leadsDatabase.unshift(lead); // Put newest lead at top
+    leadsDatabase.unshift(lead);
     res.json({ success: true, lead });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 2. Get all leads (Seeds with AI-scored data if empty)
 app.get('/api/leads', async (req, res) => {
   if (leadsDatabase.length === 0) {
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 5; i++) {
       const lead = await createRetailLead(`Customer ${i + 1}`);
       leadsDatabase.push(lead);
     }
@@ -170,7 +164,14 @@ app.delete('/api/leads/:id', (req, res) => {
   res.json({ success: true });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Node server on ${PORT}`);
-  console.log(`🧠 AI Brain expected at: ${PYTHON_SERVICE_URL}`);
-});
+// ================================
+// VERCEL COMPATIBILITY
+// ================================
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`🚀 Local server on ${PORT}`);
+  });
+}
+
+// Crucial for Vercel deployment
+module.exports = app;
