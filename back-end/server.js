@@ -26,9 +26,9 @@ app.use(passport.session());
 const allowedOrigins = [
   'http://localhost:5173',                  // Default Vite local development
   'http://localhost:3000',                  // Alternative local port
-  'http://localhost:5000',                  // YOUR PYTHON FLASK API PORT
-  'https://zetss125.github.io',             // Your GitHub Pages production site
-  'https://signature-retail-app.onrender.com' // YOUR ACTUAL PRODUCTION FRONTEND URL
+  'http://localhost:5000',                  //  PYTHON FLASK API PORT
+  'https://zetss125.github.io',             //  GitHub Pages production site
+  'https://signature-retail-app.onrender.com' //  ACTUAL PRODUCTION FRONTEND URL
 ];
 
 app.use(cors({

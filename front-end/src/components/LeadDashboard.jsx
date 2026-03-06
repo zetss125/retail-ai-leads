@@ -90,7 +90,7 @@ export default function LeadDashboard({ userData }) {
     }
   };
 
-  // FIXED: Logic filter now matches the ANN urgency thresholds
+  // Logic filter  matches the ANN urgency thresholds
   const filteredLeads = leads.filter(lead => {
     if (filter === 'all') return true;
     if (filter === 'high') return lead.score >= 75;

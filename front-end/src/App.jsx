@@ -6,7 +6,7 @@ import Header from './components/Header';
 import Settings from './components/Settings';
 import LeadsPage from './components/LeadsPage';
 
-// Import the logo correctly from your src/assets folder
+// Import the logo correctly from  src/assets folder
 import logo from './assets/signature-logo.jpg'; 
 
 function App() {
