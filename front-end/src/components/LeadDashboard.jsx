@@ -11,7 +11,12 @@ export default function LeadDashboard({ userData }) {
     medium: 0,
     low: 0
   });
-  const [filter, setFilter] = useState('all'); // 'all', 'high', 'medium', 'low'
+  const [filter, setFilter] = useState('all'); 
+
+  // Dynamic Backend URL
+  const BACKEND_URL = import.meta.env.PROD
+    ? 'https://retail-ai-leads.vercel.app'
+    : 'http://localhost:3001';
 
   useEffect(() => {
     fetchLeads();
@@ -26,7 +31,8 @@ export default function LeadDashboard({ userData }) {
       setLoading(true);
       let currentLeads = [];
 
-      if (userData.platform === 'mock') {
+      // Check if user is in Demo/Mock mode or Real Auth mode
+      if (userData.platform === 'mock' || userData.platform === 'demo') {
         // 1. GENERATE CLOTHING RETAIL MOCK DATA
         const clothingItems = ["Winter Coat", "Silk Dress", "Straight-leg Jeans", "Leather Boots", "Handbag"];
         const retailSignals = [
@@ -46,7 +52,6 @@ export default function LeadDashboard({ userData }) {
             .slice(0, 2 + Math.floor(Math.random() * 3))
             .map(s => s.replace("[ITEM]", item));
 
-          // Mocking ANN Logic: High intent actions get higher scores
           const hasHighIntent = signals.some(s => s.includes('cart') || s.includes('promo'));
           const baseScore = hasHighIntent ? 70 : 20;
           const score = Math.min(100, baseScore + Math.floor(Math.random() * 30));
@@ -64,14 +69,14 @@ export default function LeadDashboard({ userData }) {
           };
         });
       } else {
-        // 2. FETCH FROM YOUR ANN BACKEND
-        const response = await axios.get('http://localhost:3001/api/leads');
+        // 2. FETCH FROM YOUR VERCEL BACKEND (Corrected URL)
+        const response = await axios.get(`${BACKEND_URL}/api/leads`);
         currentLeads = response.data;
       }
 
       setLeads(currentLeads);
 
-      // 3. UPDATE STATS (Using consistent thresholds: 75 and 40)
+      // 3. UPDATE STATS
       const highCount = currentLeads.filter(l => l.score >= 75).length;
       const mediumCount = currentLeads.filter(l => l.score >= 40 && l.score < 75).length;
       const lowCount = currentLeads.filter(l => l.score < 40).length;
@@ -90,7 +95,6 @@ export default function LeadDashboard({ userData }) {
     }
   };
 
-  // Logic filter  matches the ANN urgency thresholds
   const filteredLeads = leads.filter(lead => {
     if (filter === 'all') return true;
     if (filter === 'high') return lead.score >= 75;
@@ -128,8 +132,8 @@ export default function LeadDashboard({ userData }) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-          <p className="mt-4 text-gray-600">Analyzing customer behavior...</p>
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+          <p className="mt-4 text-gray-600 font-serif uppercase tracking-widest text-xs">Analyzing behavior...</p>
         </div>
       </div>
     );
@@ -139,88 +143,64 @@ export default function LeadDashboard({ userData }) {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Stats Dashboard */}
       <div className="mb-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Total Card */}
-        <div className="bg-white overflow-hidden shadow rounded-lg">
+        <div className="bg-white overflow-hidden shadow-sm border border-gray-100 rounded-xl">
           <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0 h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">📊</div>
-              <div className="ml-5 w-0 flex-1">
-                <dt className="text-sm font-medium text-gray-500 truncate">Total Customers</dt>
-                <dd className="text-3xl font-semibold text-gray-900">{stats.total}</dd>
-              </div>
-            </div>
+            <dt className="text-xs font-serif text-gray-500 uppercase tracking-wider">Total Leads</dt>
+            <dd className="mt-1 text-3xl font-bold text-gray-900">{stats.total}</dd>
           </div>
         </div>
 
-        {/* High Priority Card */}
-        <div className="bg-white overflow-hidden shadow rounded-lg">
+        <div className="bg-white overflow-hidden shadow-sm border border-gray-100 rounded-xl">
           <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0 h-12 w-12 rounded-full bg-red-100 flex items-center justify-center">🔴</div>
-              <div className="ml-5 w-0 flex-1">
-                <dt className="text-sm font-medium text-gray-500 truncate">High Intent (75+)</dt>
-                <dd className="text-3xl font-semibold text-red-600">{stats.high}</dd>
-              </div>
-            </div>
+            <dt className="text-xs font-serif text-red-500 uppercase tracking-wider">High Intent</dt>
+            <dd className="mt-1 text-3xl font-bold text-red-600">{stats.high}</dd>
           </div>
         </div>
 
-        {/* Medium Priority Card */}
-        <div className="bg-white overflow-hidden shadow rounded-lg">
+        <div className="bg-white overflow-hidden shadow-sm border border-gray-100 rounded-xl">
           <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0 h-12 w-12 rounded-full bg-yellow-100 flex items-center justify-center">🟡</div>
-              <div className="ml-5 w-0 flex-1">
-                <dt className="text-sm font-medium text-gray-500 truncate">Medium Intent (40+)</dt>
-                <dd className="text-3xl font-semibold text-yellow-600">{stats.medium}</dd>
-              </div>
-            </div>
+            <dt className="text-xs font-serif text-yellow-500 uppercase tracking-wider">Warm Leads</dt>
+            <dd className="mt-1 text-3xl font-bold text-yellow-600">{stats.medium}</dd>
           </div>
         </div>
 
-        {/* Low Priority Card */}
-        <div className="bg-white overflow-hidden shadow rounded-lg">
+        <div className="bg-white overflow-hidden shadow-sm border border-gray-100 rounded-xl">
           <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0 h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">🟢</div>
-              <div className="ml-5 w-0 flex-1">
-                <dt className="text-sm font-medium text-gray-500 truncate">Low Intent</dt>
-                <dd className="text-3xl font-semibold text-green-600">{stats.low}</dd>
-              </div>
-            </div>
+            <dt className="text-xs font-serif text-green-500 uppercase tracking-wider">Monitoring</dt>
+            <dd className="mt-1 text-3xl font-bold text-green-600">{stats.low}</dd>
           </div>
         </div>
       </div>
 
       {/* Filters and Actions */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center space-x-2">
-          <span className="text-sm font-medium text-gray-700">Filter by ANN Priority:</span>
-          <div className="flex space-x-1">
+        <div className="flex items-center space-x-4">
+          <span className="text-xs font-serif text-gray-400 uppercase tracking-widest">Filter By Priority</span>
+          <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
             {['all', 'high', 'medium', 'low'].map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1 text-sm font-medium rounded-full ${
-                  filter === f ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${
+                  filter === f ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
                 }`}
               >
-                {f.charAt(0).toUpperCase() + f.slice(1)}
+                {f.toUpperCase()}
               </button>
             ))}
           </div>
         </div>
         
         <div className="flex space-x-3">
-          <button onClick={fetchLeads} className="px-4 py-2 border rounded-md text-sm bg-white hover:bg-gray-50">Refresh</button>
-          <button onClick={exportToCSV} className="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700">Export CSV</button>
+          <button onClick={fetchLeads} className="px-4 py-2 text-xs font-bold border border-gray-200 rounded-lg hover:bg-gray-50 uppercase tracking-tighter">Refresh</button>
+          <button onClick={exportToCSV} className="px-4 py-2 text-xs font-bold bg-gray-900 text-white rounded-lg hover:bg-black uppercase tracking-tighter">Export CSV</button>
         </div>
       </div>
 
       {/* Grid */}
       {filteredLeads.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-lg shadow">
-          <p className="text-gray-500">No customers found for this priority level.</p>
+        <div className="text-center py-20 bg-white rounded-xl shadow-sm border border-dashed border-gray-200">
+          <p className="text-gray-400 font-serif italic text-sm">No leads match the selected criteria.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -229,21 +209,6 @@ export default function LeadDashboard({ userData }) {
           ))}
         </div>
       )}
-
-      {/* Info Footer */}
-      <div className="mt-8 p-4 bg-blue-50 rounded-lg">
-        <div className="flex">
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-blue-800">ANN Scoring System</h3>
-            <div className="mt-2 text-sm text-blue-700">
-              <p>
-                Scores are generated via a Deep Learning Regression model based on social media shopping signals.
-                <strong> High Intent (75+)</strong> indicates immediate purchase likelihood.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

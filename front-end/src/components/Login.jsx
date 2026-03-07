@@ -6,6 +6,11 @@ export default function Login({ onLogin, logo }) {
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('facebook');
 
+  // Define the backend URL based on environment
+  const BACKEND_URL = import.meta.env.PROD
+    ? 'https://retail-ai-leads.vercel.app'
+    : 'http://localhost:3001';
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
@@ -17,25 +22,30 @@ export default function Login({ onLogin, logo }) {
   const handleTokenAnalysis = async (token) => {
     setLoading(true);
     try {
-      const backendUrl = process.env.NODE_ENV === 'production'
-        ? 'https://your-new-retail-backend.onrender.com'
-        : 'http://localhost:3001';
-
-      const response = await axios.post(`${backendUrl}/api/analyze-facebook`, { accessToken: token });
+      // Points to your Vercel backend
+      const response = await axios.post(`${BACKEND_URL}/api/analyze-facebook`, { 
+        accessToken: token 
+      });
       onLogin({ token, user: response.data.lead, platform: 'facebook' });
     } catch (err) {
+      console.error("Auth Error:", err);
       setError('Analysis failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleFacebookLogin = () => {
+    // Redirects user to the Vercel Facebook Auth route
+    window.location.href = `${BACKEND_URL}/auth/facebook`;
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        {/* LOGO SECTION */}
+        {/* LOGO SECTION - Note: check if path needs to be /assets/signature-logo.jpg in production */}
         <img 
-          src="./src/assets/signature-logo.jpg" 
+          src={logo || "./assets/signature-logo.jpg"} 
           alt="Signature Logo" 
           className="mx-auto h-24 w-auto mb-4" 
         />
@@ -71,7 +81,7 @@ export default function Login({ onLogin, logo }) {
                 Analyze your social signals to identify high-intent retail customers.
               </p>
               <button
-                onClick={() => window.location.href = 'http://localhost:3001/auth/facebook'}
+                onClick={handleFacebookLogin}
                 disabled={loading}
                 className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gray-900 hover:bg-black focus:outline-none transition-all"
               >
