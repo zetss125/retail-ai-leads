@@ -112,14 +112,17 @@ def predict():
         score = float(score_raw)
 
         # --- STEP 2: BUSINESS LOGIC OVERRIDE ---
-        if sig_count >= 6:
-            # High activity MUST be high score (85-100)
-            score = max(score, 85 + min(14, sig_count * 2))
-        elif sig_count >= 4:
-            # Medium-High activity (70-84)
-            score = max(score, 70)
+        if sig_count >= 5:
+            # If they have 5 or more signals, they are "Gold" leads
+            # We start them at 90 and add a bit more for every signal
+            score = max(score, 90 + min(9, sig_count)) 
+        elif sig_count >= 3:
+            # 3-4 signals are strong (75-89)
+            score = max(score, 75)
+        elif sig_count >= 1:
+            # Even 1 signal is better than nothing
+            score = max(score, 50)
         elif sig_count == 0:
-            # No activity MUST be low score
             score = min(score, 15)
 
         # Final Clip
