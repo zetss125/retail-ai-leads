@@ -129,7 +129,7 @@ def predict():
         print(f"--- PREDICTION LOG ---")
         print(f"Inputs: {location} | {platform} | Signals: {sig_count}")
         print(f"Result: {int(score)} ({'HIGH' if score >= 75 else 'MEDIUM' if score >= 40 else 'LOW'})")
-
+        print(f"DEBUG: Scaled AI Prediction: {pred_scaled[0]}")
         return jsonify({
             "score": int(score),
             "urgency": "HIGH" if score >= 75 else "MEDIUM" if score >= 40 else "LOW",
@@ -141,6 +141,7 @@ def predict():
         print(f"❌ Prediction Error: {str(e)}")
         traceback.print_exc() 
         return jsonify({"error": "Internal server error during prediction"}), 500
+       
 
 if __name__ == "__main__":
     # Use the PORT provided by Railway, default to 8080 for local
