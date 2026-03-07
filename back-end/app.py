@@ -2,18 +2,31 @@ import os
 import numpy as np
 import pandas as pd
 import joblib
+import traceback
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)
+
+# Configure CORS to allow your Vercel and GitHub Pages domains
+CORS(app, resources={r"/*": {"origins": [
+    "https://retail-ai-leads.vercel.app", 
+    "https://zetss125.github.io",
+    "http://localhost:5173",
+    "http://localhost:3001"
+]}})
 
 # ---------------------------------------------------------
 # 1. LOAD AI MODELS & SCALERS
 # ---------------------------------------------------------
+model = None
+encoder = None
+vectorizer = None
+target_scaler = None
+
 try:
-    # We now load the Target Scaler to handle the 0-1 vs 0-100 conversion
+    # Loading models from the root directory
     model = joblib.load('omnilead_gb_model.pkl')
     encoder = joblib.load('encoder.pkl')
     vectorizer = joblib.load('vectorizer.pkl')
@@ -21,6 +34,7 @@ try:
     print("✅ HYBRID MODEL: AI + Business Logic loaded successfully.")
 except Exception as e:
     print(f"❌ Error loading models: {e}")
+    traceback.print_exc()
 
 # ---------------------------------------------------------
 # 2. HELPER: CLEAN SIGNALS
@@ -35,23 +49,47 @@ def clean_signals(text):
     return " ".join(text.split())
 
 # ---------------------------------------------------------
-# 3. PREDICTION ENDPOINT
+# 3. ROUTES
 # ---------------------------------------------------------
-@app.route('/predict', methods=['POST'])
+
+@app.route('/', methods=['GET'])
+def health_check():
+    """Root endpoint to verify the server is active and models are loaded."""
+    status = "Online" if model is not None else "Online (Models Missing)"
+    return jsonify({
+        "status": status,
+        "message": "Signature Retail AI Brain is active",
+        "endpoints": ["/predict (POST)"]
+    }), 200
+
+@app.route('/predict', methods=['POST', 'OPTIONS'])
 def predict():
+    # Handle CORS preflight request
+    if request.method == 'OPTIONS':
+        return '', 200
+
     try:
         data = request.get_json()
         if not data:
             return jsonify({"error": "No data provided"}), 400
+
+        # Safety check for loaded models
+        if model is None:
+            return jsonify({"error": "AI models not loaded on server"}), 500
 
         # Extract Inputs
         raw_platform = data.get('platform', 'Facebook')
         platform = str(raw_platform).capitalize() if str(raw_platform).lower() == "facebook" else str(raw_platform)
         location = data.get('location', 'New York')
         signals = data.get('signals', '')
-        signals_str = "; ".join(signals) if isinstance(signals, list) else str(signals)
         
-        # Clean
+        # Format signals into a string
+        if isinstance(signals, list):
+            signals_str = "; ".join(signals)
+        else:
+            signals_str = str(signals)
+        
+        # Clean text for vectorizer
         cleaned_text = clean_signals(signals_str)
         
         # Transform Features
@@ -68,13 +106,14 @@ def predict():
 
         # --- STEP 1: AI PREDICTION ---
         pred_scaled = model.predict(X_input)
-        # Convert back from 0-1 range to 0-100
-        score = target_scaler.inverse_transform(pred_scaled.reshape(-1, 1))[0][0]
+        
+        # Convert back from 0-1 range to 0-100 using target_scaler
+        score_raw = target_scaler.inverse_transform(pred_scaled.reshape(-1, 1))[0][0]
+        score = float(score_raw)
 
-        # --- STEP 2: BUSINESS LOGIC OVERRIDE (The Fix) ---
-        # If the AI is being too conservative, we force the score into the correct tier
+        # --- STEP 2: BUSINESS LOGIC OVERRIDE ---
         if sig_count >= 6:
-            # High activity MUST be high score (85-99)
+            # High activity MUST be high score (85-100)
             score = max(score, 85 + min(14, sig_count * 2))
         elif sig_count >= 4:
             # Medium-High activity (70-84)
@@ -86,12 +125,10 @@ def predict():
         # Final Clip
         score = max(0, min(100, score)) 
 
-        # Logging for Debugging
-        print(f"\n--- HYBRID PREDICTION ---")
-        print(f"Signals Detected: {int(sig_count)}")
-        print(f"Base AI Score: {int(pred_scaled[0] * 100)}")
-        print(f"Final Hybrid Score: {int(score)}")
-        print(f"--------------------------")
+        # Logging for Railway Debugging
+        print(f"--- PREDICTION LOG ---")
+        print(f"Inputs: {location} | {platform} | Signals: {sig_count}")
+        print(f"Result: {int(score)} ({'HIGH' if score >= 75 else 'MEDIUM' if score >= 40 else 'LOW'})")
 
         return jsonify({
             "score": int(score),
@@ -101,12 +138,12 @@ def predict():
         })
         
     except Exception as e:
-        import traceback
-        print(f"❌ Prediction Error: {e}")
+        print(f"❌ Prediction Error: {str(e)}")
         traceback.print_exc() 
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error during prediction"}), 500
 
 if __name__ == "__main__":
     # Use the PORT provided by Railway, default to 8080 for local
     port = int(os.environ.get("PORT", 8080))
+    # host 0.0.0.0 is required for Railway to expose the service
     app.run(host='0.0.0.0', port=port)
