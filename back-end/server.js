@@ -151,7 +151,7 @@ app.post('/api/analyze-facebook', async (req, res) => {
 
 app.get('/api/leads', async (req, res) => {
   if (leadsDatabase.length === 0) {
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 10; i++) {
       const lead = await createRetailLead(`Customer ${i + 1}`);
       leadsDatabase.push(lead);
     }
