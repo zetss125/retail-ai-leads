@@ -1,7 +1,6 @@
 flask
 flask-cors
-numpy
-pandas
-joblib
-scikit-learn==1.6.1
-gunicorn
+torch --index-url https://download.pytorch.org/whl/cpu
+transformers
+accelerate
+huggingface_hub
