@@ -5,17 +5,11 @@ import axios from 'axios';
 export default function LeadDashboard({ userData }) {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    total: 0,
-    high: 0,
-    medium: 0,
-    low: 0
-  });
+  const [stats, setStats] = useState({ total: 0, high: 0, medium: 0, low: 0 });
   const [filter, setFilter] = useState('all'); 
 
-  // Dynamic Backend URL - Points to your Railway deployment
   const BACKEND_URL = import.meta.env.PROD
-    ? 'https://your-railway-url.railway.app' 
+    ? 'https://your-railway-app.railway.app' // Update with your actual Railway URL
     : 'http://localhost:8080';
 
   useEffect(() => {
@@ -30,67 +24,73 @@ export default function LeadDashboard({ userData }) {
       let currentLeads = [];
 
       if (userData.platform === 'mock' || userData.platform === 'demo') {
-        // --- 1. ENHANCED MOCK DATA GENERATION ---
-        const clothingItems = ["Winter Coat", "Silk Dress", "Straight-leg Jeans", "Leather Boots", "Handbag", "Cashmere Sweater"];
-        const retailSignals = [
-          "Added [ITEM] to cart",
-          "Used a promo code for [ITEM]",
-          "Inquired about [ITEM] stock availability",
-          "Requested restock notification for [ITEM]",
-          "Asked for [ITEM] sizing",
-          "Saved [ITEM] to wishlist",
-          "Clicked on [ITEM] ad"
-        ];
+        // --- 1. CONFIGURATION MATCHING YOUR DATASET ---
+        const clothingItems = ["Winter Coat", "Silk Dress", "Straight-leg Jeans", "Leather Boots", "Handbag", "Cashmere Sweater", "Linen Shirt", "Trench Coat"];
+        
+        const highSignals = ["Added [ITEM] to cart", "Used a promo code for [ITEM]", "Requested restock notification for [ITEM]", "Inquired about [ITEM] stock availability"];
+        const midSignals = ["Asked for [ITEM] sizing", "Saved [ITEM] to wishlist", "Viewed [ITEM] details", "Shared [ITEM] link on wall"];
+        const lowSignals = ["Clicked on [ITEM] ad", "Browsed [ITEM] collection", "Liked [ITEM] photo", "Commented on [ITEM] post"];
 
         currentLeads = Array.from({ length: 12 }, (_, i) => {
           const item = clothingItems[Math.floor(Math.random() * clothingItems.length)];
+          const urgencyRand = Math.random();
           
-          // Randomly select 2-4 signals
-          const signals = retailSignals
-            .sort(() => 0.5 - Math.random())
-            .slice(0, 2 + Math.floor(Math.random() * 3))
-            .map(s => s.replace("[ITEM]", item));
+          let urgency, signals, baseScore;
 
-          // HIGH INTENT LOGIC: Crossing the 80% Threshold
-          const hasHighIntent = signals.some(s => 
-            s.includes('cart') || s.includes('promo') || s.includes('stock') || s.includes('restock')
-          );
+          // --- 2. LOGIC MATCHING YOUR DATASET SCORING ---
+          if (urgencyRand > 0.7) { 
+            // HIGH INTENT (Dataset Score: 80-100)
+            urgency = 'HIGH';
+            signals = [
+              ...highSignals.sort(() => 0.5 - Math.random()).slice(0, 2),
+              ...midSignals.sort(() => 0.5 - Math.random()).slice(0, 2),
+              ...lowSignals.sort(() => 0.5 - Math.random()).slice(0, 1)
+            ];
+            baseScore = 80 + Math.floor(Math.random() * 18); // 80 to 98
+          } else if (urgencyRand > 0.3) {
+            // MEDIUM INTENT (Dataset Score: 45-79)
+            urgency = 'MEDIUM';
+            signals = [
+              ...midSignals.sort(() => 0.5 - Math.random()).slice(0, 2),
+              ...lowSignals.sort(() => 0.5 - Math.random()).slice(0, 2)
+            ];
+            baseScore = 45 + Math.floor(Math.random() * 34); // 45 to 79
+          } else {
+            // LOW INTENT (Dataset Score: 10-44)
+            urgency = 'LOW';
+            signals = [
+              ...lowSignals.sort(() => 0.5 - Math.random()).slice(0, 3)
+            ];
+            baseScore = 10 + Math.floor(Math.random() * 34); // 10 to 44
+          }
 
-          // If high intent, base is 82. If not, base is 25.
-          const baseScore = hasHighIntent ? 82 : 25;
-          // Add a random "polish" to make scores look unique (e.g., 87%, 91%, etc.)
-          const score = Math.min(100, baseScore + Math.floor(Math.random() * 15));
+          const processedSignals = signals.map(s => s.replace("[ITEM]", item));
 
           return {
             id: `customer-${Date.now()}-${i}`,
-            name: `Lead #${1000 + i}`,
-            email: `client${i}@example.com`,
-            location: ['New York', 'Austin', 'Paris', 'London', 'Toronto', 'Tokyo'][Math.floor(Math.random() * 6)],
-            score: score,
-            signals: signals,
-            urgency: score >= 80 ? 'HIGH' : score >= 45 ? 'MEDIUM' : 'LOW',
-            platform: ['Facebook', 'Instagram', 'TikTok', 'Google'][Math.floor(Math.random() * 4)],
+            name: `Lead #${12500 + i}`,
+            email: `customer${12500 + i}@email.com`,
+            location: ['New York', 'Austin', 'Paris', 'London', 'Toronto', 'Houston', 'Miami', 'Chicago'][Math.floor(Math.random() * 8)],
+            score: baseScore,
+            signals: processedSignals,
+            urgency: urgency,
+            platform: ['Facebook', 'Instagram', 'TikTok', 'Snapchat', 'Pinterest'][Math.floor(Math.random() * 5)],
             timestamp: new Date().toISOString()
           };
         });
       } else {
-        // --- 2. FETCH FROM REAL RAILWAY BACKEND ---
         const response = await axios.get(`${BACKEND_URL}/api/leads`);
         currentLeads = response.data;
       }
 
       setLeads(currentLeads);
 
-      // --- 3. UPDATED STATS CALCULATION ---
-      const highCount = currentLeads.filter(l => l.score >= 80).length;
-      const mediumCount = currentLeads.filter(l => l.score >= 45 && l.score < 80).length;
-      const lowCount = currentLeads.filter(l => l.score < 45).length;
-
+      // --- 3. STATS CALCULATION ---
       setStats({
         total: currentLeads.length,
-        high: highCount,
-        medium: mediumCount,
-        low: lowCount
+        high: currentLeads.filter(l => l.score >= 80).length,
+        medium: currentLeads.filter(l => l.score >= 45 && l.score < 80).length,
+        low: currentLeads.filter(l => l.score < 45).length
       });
 
     } catch (error) {
@@ -118,7 +118,7 @@ export default function LeadDashboard({ userData }) {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `retail-leads-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `retail-leads-export.csv`;
     a.click();
   };
 
@@ -126,70 +126,63 @@ export default function LeadDashboard({ userData }) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-4 border-black"></div>
-          <p className="mt-4 text-gray-500 font-serif uppercase tracking-widest text-[10px]">AI Scoring Engine Live...</p>
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
+          <p className="mt-4 text-gray-500 font-serif uppercase tracking-[0.3em] text-[10px]">Processing Data Streams...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
-      {/* Stats Dashboard */}
-      <div className="mb-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <StatItem label="Total Potential" value={stats.total} color="text-gray-900" />
-        <StatItem label="High Conversion" value={stats.high} color="text-red-600" />
-        <StatItem label="Warm Prospects" value={stats.medium} color="text-orange-500" />
-        <StatItem label="Nurture Queue" value={stats.low} color="text-blue-500" />
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Stats Header */}
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-4">
+        <StatCard label="Total Leads" value={stats.total} color="text-black" />
+        <StatCard label="High Intent (80+)" value={stats.high} color="text-red-600" />
+        <StatCard label="Warm Prospects" value={stats.medium} color="text-orange-500" />
+        <StatCard label="Browsers" value={stats.low} color="text-gray-400" />
       </div>
 
-      {/* Filters */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center space-x-4">
-          <span className="text-[10px] font-serif text-gray-400 uppercase tracking-[0.2em]">Priority Filter</span>
-          <div className="flex space-x-1 bg-gray-100 p-1 rounded-xl">
+      {/* Control Bar */}
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-100 pb-6">
+        <div className="flex items-center space-x-6">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Filter Pipeline</span>
+          <div className="flex space-x-1">
             {['all', 'high', 'medium', 'low'].map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-5 py-2 text-[10px] font-bold rounded-lg transition-all uppercase tracking-tighter ${
-                  filter === f ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
+                className={`px-4 py-1.5 text-[10px] font-bold rounded-full transition-all ${
+                  filter === f ? 'bg-black text-white' : 'text-gray-400 hover:bg-gray-50'
                 }`}
               >
-                {f}
+                {f.toUpperCase()}
               </button>
             ))}
           </div>
         </div>
         
         <div className="flex space-x-2">
-          <button onClick={fetchLeads} className="px-5 py-2 text-[10px] font-bold border border-gray-200 rounded-xl hover:bg-gray-50 uppercase tracking-widest">Sync</button>
-          <button onClick={exportToCSV} className="px-5 py-2 text-[10px] font-bold bg-black text-white rounded-xl hover:bg-zinc-800 uppercase tracking-widest">Export</button>
+          <button onClick={fetchLeads} className="px-4 py-2 text-[10px] font-bold border border-gray-200 rounded-full hover:bg-gray-50">REFRESH</button>
+          <button onClick={exportToCSV} className="px-4 py-2 text-[10px] font-bold bg-black text-white rounded-full hover:bg-zinc-800">EXPORT DATA</button>
         </div>
       </div>
 
-      {/* Grid */}
-      {filteredLeads.length === 0 ? (
-        <div className="text-center py-20 bg-gray-50 rounded-3xl border border-dashed border-gray-200">
-          <p className="text-gray-400 font-serif italic text-sm">Waiting for incoming signals...</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filteredLeads.map((lead) => (
-            <LeadCard key={lead.id} lead={lead} />
-          ))}
-        </div>
-      )}
+      {/* Lead Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredLeads.map((lead) => (
+          <LeadCard key={lead.id} lead={lead} />
+        ))}
+      </div>
     </div>
   );
 }
 
-// Helper component for Stats
-function StatItem({ label, value, color }) {
+function StatCard({ label, value, color }) {
   return (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-      <dt className="text-[10px] font-serif text-gray-400 uppercase tracking-widest">{label}</dt>
-      <dd className={`mt-2 text-4xl font-light ${color}`}>{value}</dd>
+    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+      <p className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.2em]">{label}</p>
+      <p className={`mt-2 text-3xl font-light ${color}`}>{value}</p>
     </div>
   );
 }
