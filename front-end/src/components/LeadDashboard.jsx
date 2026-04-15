@@ -23,64 +23,48 @@ export default function LeadDashboard({ userData }) {
       setLoading(true);
       let currentLeads = [];
 
+      // Logic for Demo Mode
       if (userData.platform === 'mock' || userData.platform === 'demo') {
-        const items = ["Silk Dress", "Winter Coat", "Leather Boots", "Handbag", "Straight-leg Jeans"];
+        const items = ["Silk Dress", "Winter Coat", "Leather Boots", "Handbag", "Straight-leg Jeans", "Trench Coat"];
         
         currentLeads = Array.from({ length: 12 }, (_, i) => {
           const item = items[Math.floor(Math.random() * items.length)];
-          const isHighValue = i < 5; // We want the first 5 leads to have the "Customer 2" pattern
+          const isHighValue = i < 5; // We force the first 5 to be High Intent 80+
 
-          let urgency, signals, score;
+          let urgency, signalString, score;
 
           if (isHighValue) {
-            // --- FIXED: LONG SEMICOLON CHAIN ---
             urgency = "HIGH";
-            // We force a long array of specific high-intent signals
-            const highIntentSequence = [
-              `Added ${item} to cart`,
-              `Viewed ${item} details`,
-              `Asked for ${item} sizing`,
-              `Requested restock notification for ${item}`,
-              `Saved ${item} to wishlist`,
-              `Used a promo code for ${item}`
-            ];
-            
-            // Join them all together. No slicing. No random shortening.
-            signals = highIntentSequence.join("; "); 
-            
-            // This pattern (HIGH + 5+ signals) triggers the 80-99 range in your BERT model
+            // LONG STRING FORMAT: Required to break the 69% score cap
+            signalString = `Added ${item} to cart; Viewed ${item} details; Asked for ${item} sizing; Requested restock notification for ${item}; Saved ${item} to wishlist; Used a promo code for ${item}`;
             score = 88 + Math.floor(Math.random() * 11); 
           } else {
-            // MEDIUM/LOW PATTERN (Short signals)
             urgency = Math.random() > 0.5 ? "MEDIUM" : "LOW";
-            const lowIntentSequence = [
-              `Clicked on ${item} ad`,
-              `Browsed ${item} collection`,
-              `Liked ${item} photo`
-            ];
-            // We only use 1 or 2 signals here to keep the score low
-            signals = lowIntentSequence.slice(0, 2).join("; ");
-            score = 10 + Math.floor(Math.random() * 45); 
+            signalString = `Clicked on ${item} ad; Liked ${item} photo; Browsed ${item} collection`;
+            score = 15 + Math.floor(Math.random() * 45); // Maxes out around 60
           }
 
           return {
             id: `lead-${Date.now()}-${i}`,
             name: `Lead #${12500 + i}`,
             email: `customer${12500 + i}@email.com`,
-            location: ['New York', 'Austin', 'Paris', 'London'][Math.floor(Math.random() * 4)],
+            location: ['New York', 'Austin', 'London', 'Paris', 'Toronto'][Math.floor(Math.random() * 5)],
             score: score,
-            signals: signals, 
+            signals: signalString, // Sent as a formatted string
             urgency: urgency,
-            platform: 'Instagram',
+            platform: ['Instagram', 'Facebook', 'TikTok'][Math.floor(Math.random() * 3)],
             timestamp: new Date().toISOString()
           };
         });
       } else {
+        // Real API Fetch
         const response = await axios.get(`${BACKEND_URL}/api/leads`);
         currentLeads = response.data;
       }
 
       setLeads(currentLeads);
+      
+      // Sync stats with the 80+ threshold
       setStats({
         total: currentLeads.length,
         high: currentLeads.filter(l => l.score >= 80).length,
@@ -89,7 +73,7 @@ export default function LeadDashboard({ userData }) {
       });
 
     } catch (error) {
-      console.error("Error fetching leads:", error);
+      console.error("Fetch Error:", error);
     } finally {
       setLoading(false);
     }
@@ -113,7 +97,7 @@ export default function LeadDashboard({ userData }) {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `retail-report.csv`;
+    a.download = `retail-crm-export.csv`;
     a.click();
   };
 
@@ -122,44 +106,40 @@ export default function LeadDashboard({ userData }) {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
-          <p className="mt-4 text-gray-400 font-serif uppercase tracking-[0.3em] text-[10px]">AI Pipeline Active...</p>
+          <p className="mt-4 text-[10px] font-bold uppercase tracking-widest text-gray-400">Analyzing Signals...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Stats Section */}
+    <div className="max-w-7xl mx-auto px-4 py-8">
+      {/* KPI Section */}
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-4">
-        <MetricCard label="Total Leads" value={stats.total} color="text-black" />
-        <MetricCard label="High Intent (80+)" value={stats.high} color="text-red-600" />
-        <MetricCard label="Warm Prospects" value={stats.medium} color="text-orange-500" />
-        <MetricCard label="Cold Leads" value={stats.low} color="text-gray-300" />
+        <MetricCard label="Incoming Leads" value={stats.total} color="text-black" />
+        <MetricCard label="Hot (Score 80+)" value={stats.high} color="text-red-600" />
+        <MetricCard label="Warm" value={stats.medium} color="text-orange-500" />
+        <MetricCard label="Cold" value={stats.low} color="text-gray-300" />
       </div>
 
-      {/* Filter Bar */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-100 pb-6">
-        <div className="flex items-center space-x-6">
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Filter Pipeline</span>
-          <div className="flex space-x-1 bg-gray-50 p-1 rounded-xl">
-            {['all', 'high', 'medium', 'low'].map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-4 py-2 text-[10px] font-bold rounded-lg transition-all ${
-                  filter === f ? 'bg-white text-black shadow-sm' : 'text-gray-400 hover:text-gray-600'
-                }`}
-              >
-                {f.toUpperCase()}
-              </button>
-            ))}
-          </div>
+      {/* Toolbar */}
+      <div className="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 border-b border-gray-100 pb-6">
+        <div className="flex bg-gray-100 p-1 rounded-2xl">
+          {['all', 'high', 'medium', 'low'].map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-6 py-2 text-[10px] font-bold rounded-xl uppercase transition-all ${
+                filter === f ? 'bg-white text-black shadow-sm' : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
         </div>
-        
         <div className="flex space-x-2">
-          <button onClick={fetchLeads} className="px-5 py-2 text-[10px] font-bold border border-gray-200 rounded-xl hover:bg-gray-50 uppercase tracking-widest">Refresh</button>
-          <button onClick={exportToCSV} className="px-5 py-2 text-[10px] font-bold bg-black text-white rounded-xl hover:bg-zinc-800 uppercase tracking-widest">Export</button>
+          <button onClick={fetchLeads} className="px-6 py-2 text-[10px] font-bold border border-gray-200 rounded-xl hover:bg-gray-50 uppercase">Sync API</button>
+          <button onClick={exportToCSV} className="px-6 py-2 text-[10px] font-bold bg-black text-white rounded-xl hover:bg-zinc-800 uppercase">Export</button>
         </div>
       </div>
 
@@ -175,9 +155,9 @@ export default function LeadDashboard({ userData }) {
 
 function MetricCard({ label, value, color }) {
   return (
-    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-      <p className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.2em]">{label}</p>
-      <p className={`mt-2 text-3xl font-light ${color}`}>{value}</p>
+    <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+      <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{label}</p>
+      <p className={`mt-2 text-4xl font-light ${color}`}>{value}</p>
     </div>
   );
 }
