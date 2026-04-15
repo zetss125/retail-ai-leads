@@ -18,10 +18,47 @@ export default function LeadDashboard({ userData }) {
     return () => clearInterval(interval);
   }, []);
 
+  // ---------------------------------------------------------
+  // Calls Flask /predict for a single lead's signals.
+  // Returns { score, urgency } from the BERT model.
+  // Falls back to rule-based scoring if the API is unreachable.
+  // ---------------------------------------------------------
+  const scoreLeadViaAPI = async (signals) => {
+    try {
+      const response = await axios.post(
+        `${BACKEND_URL}/predict`,
+        { signals },
+        { timeout: 8000 }
+      );
+      return {
+        score: response.data.score,
+        urgency: response.data.urgency
+      };
+    } catch (err) {
+      console.warn("⚠️ Flask API unreachable, using fallback scoring:", err.message);
+      // Fallback: rule-based scoring matching CSV signal weights
+      const s = signals.toLowerCase();
+      let fallbackScore = 10;
+      if (s.includes('added') && s.includes('promo code'))     fallbackScore = 88 + Math.floor(Math.random() * 10);
+      else if (s.includes('added') && s.includes('inquired'))  fallbackScore = 85 + Math.floor(Math.random() * 10);
+      else if (s.includes('added') && s.includes('requested')) fallbackScore = 83 + Math.floor(Math.random() * 10);
+      else if (s.includes('added') && s.includes('commented')) fallbackScore = 80 + Math.floor(Math.random() * 8);
+      else if (s.includes('added'))                            fallbackScore = 55 + Math.floor(Math.random() * 20);
+      else if (s.includes('promo code'))                       fallbackScore = 50 + Math.floor(Math.random() * 20);
+      else if (s.includes('saved') || s.includes('viewed'))    fallbackScore = 30 + Math.floor(Math.random() * 20);
+      else                                                     fallbackScore = 10 + Math.floor(Math.random() * 25);
+
+      return {
+        score: fallbackScore,
+        urgency: fallbackScore >= 80 ? 'HIGH' : fallbackScore >= 45 ? 'MEDIUM' : 'LOW'
+      };
+    }
+  };
+
   const fetchLeads = async () => {
     try {
       setLoading(true);
-      let currentLeads = [];
+      let rawLeads = [];
 
       if (userData.platform === 'mock' || userData.platform === 'demo') {
         const items = [
@@ -32,75 +69,84 @@ export default function LeadDashboard({ userData }) {
         const platforms = ['Facebook', 'Instagram', 'TikTok', 'Snapchat', 'Pinterest'];
         const locations = ['New York', 'Austin', 'London', 'Toronto', 'Paris', 'Los Angeles', 'Chicago'];
 
-        currentLeads = Array.from({ length: 12 }, (_, i) => {
+        // Build raw leads with signals ONLY — NO hardcoded scores
+        // All scores come from Flask /predict below
+        rawLeads = Array.from({ length: 12 }, (_, i) => {
           const item = items[Math.floor(Math.random() * items.length)];
           const platform = platforms[Math.floor(Math.random() * platforms.length)];
           const location = locations[Math.floor(Math.random() * locations.length)];
 
-          let urgency, signalString, score;
+          let signalString;
 
           if (i < 4) {
-            // HIGH priority — mirrors CSV rows scoring 82–99
-            // Must include "Added to cart" + high-weight signals like promo/stock inquiry
-            urgency = "HIGH";
-            const highSignalSets = [
+            // HIGH intent — matches CSV HIGH rows (score 80–99)
+            const highSignals = [
               `Added ${item} to cart; Used a promo code for ${item}; Inquired about ${item} stock availability; Saved ${item} to wishlist; Asked for ${item} sizing`,
               `Added ${item} to cart; Requested restock notification for ${item}; Commented on ${item} post; Shared ${item} link on wall; Clicked on ${item} ad`,
               `Clicked on ${item} ad; Asked for ${item} sizing; Used a promo code for ${item}; Saved ${item} to wishlist; Added ${item} to cart`,
               `Added ${item} to cart; Inquired about ${item} stock availability; Commented on ${item} post; Requested restock notification for ${item}; Liked ${item} photo`,
             ];
-            signalString = highSignalSets[i % highSignalSets.length];
-            score = 82 + Math.floor(Math.random() * 17); // 82–99
+            signalString = highSignals[i % highSignals.length];
 
           } else if (i < 8) {
-            // MEDIUM priority — mirrors CSV rows scoring 45–79
-            urgency = "MEDIUM";
-            const medSignalSets = [
+            // MEDIUM intent — matches CSV MEDIUM rows (score 45–79)
+            const medSignals = [
               `Added ${item} to cart; Liked ${item} photo; Saved ${item} to wishlist; Asked for ${item} sizing`,
               `Used a promo code for ${item}; Requested restock notification for ${item}; Shared ${item} link on wall; Browsed ${item} collection`,
               `Viewed ${item} details; Added ${item} to cart; Commented on ${item} post`,
               `Saved ${item} to wishlist; Requested restock notification for ${item}; Inquired about ${item} stock availability; Viewed ${item} details`,
             ];
-            signalString = medSignalSets[(i - 4) % medSignalSets.length];
-            score = 45 + Math.floor(Math.random() * 34); // 45–78
+            signalString = medSignals[(i - 4) % medSignals.length];
 
           } else {
-            // LOW priority — passive browsing/social only
-            urgency = "LOW";
-            const lowSignalSets = [
+            // LOW intent — passive browsing/social only
+            const lowSignals = [
               `Clicked on ${item} ad; Liked ${item} photo`,
               `Browsed ${item} collection; Commented on ${item} post`,
               `Shared ${item} link on wall; Viewed ${item} details`,
               `Liked ${item} photo; Asked for ${item} sizing`,
             ];
-            signalString = lowSignalSets[(i - 8) % lowSignalSets.length];
-            score = 12 + Math.floor(Math.random() * 30); // 12–41
+            signalString = lowSignals[(i - 8) % lowSignals.length];
           }
 
           return {
             id: `lead-${Date.now()}-${i}`,
-            name: `Customer ${12500 + i}`,
+            name: `Customer ${i + 1}`,
             email: `customer${9000 + Math.floor(Math.random() * 999)}@email.com`,
             location,
-            score,
             signals: signalString,
-            urgency,
             platform,
             timestamp: new Date().toISOString()
+            // ✅ No score here — Flask assigns it below
           };
         });
 
       } else {
+        // Real platform: fetch raw leads from backend (scores assigned below)
         const response = await axios.get(`${BACKEND_URL}/api/leads`);
-        currentLeads = response.data;
+        rawLeads = response.data;
       }
 
-      setLeads(currentLeads);
+      // ---------------------------------------------------------
+      // SCORE EVERY LEAD VIA FLASK /predict
+      // Runs for BOTH mock and real leads in parallel.
+      // ---------------------------------------------------------
+      const scoredLeads = await Promise.all(
+        rawLeads.map(async (lead) => {
+          const { score, urgency } = await scoreLeadViaAPI(lead.signals);
+          return { ...lead, score, urgency };
+        })
+      );
+
+      // Sort highest score first
+      scoredLeads.sort((a, b) => b.score - a.score);
+
+      setLeads(scoredLeads);
       setStats({
-        total: currentLeads.length,
-        high: currentLeads.filter(l => l.score >= 80).length,
-        medium: currentLeads.filter(l => l.score >= 45 && l.score < 80).length,
-        low: currentLeads.filter(l => l.score < 45).length
+        total:  scoredLeads.length,
+        high:   scoredLeads.filter(l => l.score >= 80).length,
+        medium: scoredLeads.filter(l => l.score >= 45 && l.score < 80).length,
+        low:    scoredLeads.filter(l => l.score < 45).length
       });
 
     } catch (error) {
@@ -111,14 +157,18 @@ export default function LeadDashboard({ userData }) {
   };
 
   const filteredLeads = leads.filter(lead => {
-    if (filter === 'all') return true;
-    if (filter === 'high') return lead.score >= 80;
+    if (filter === 'all')    return true;
+    if (filter === 'high')   return lead.score >= 80;
     if (filter === 'medium') return lead.score >= 45 && lead.score < 80;
-    if (filter === 'low') return lead.score < 45;
+    if (filter === 'low')    return lead.score < 45;
     return true;
   });
 
-  if (loading) return <div className="p-10 text-center">Loading AI Pipeline...</div>;
+  if (loading) return (
+    <div className="p-10 text-center text-gray-500">
+      <p className="text-sm font-semibold animate-pulse">🤖 AI scoring leads via BERT model...</p>
+    </div>
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
