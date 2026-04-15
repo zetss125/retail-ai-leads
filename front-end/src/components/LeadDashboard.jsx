@@ -23,48 +23,44 @@ export default function LeadDashboard({ userData }) {
       setLoading(true);
       let currentLeads = [];
 
-      // Logic for Demo Mode
       if (userData.platform === 'mock' || userData.platform === 'demo') {
-        const items = ["Silk Dress", "Winter Coat", "Leather Boots", "Handbag", "Straight-leg Jeans", "Trench Coat"];
+        const items = ["Silk Dress", "Winter Coat", "Leather Boots", "Handbag", "Straight-leg Jeans"];
         
         currentLeads = Array.from({ length: 12 }, (_, i) => {
           const item = items[Math.floor(Math.random() * items.length)];
-          const isHighValue = i < 5; // We force the first 5 to be High Intent 80+
+          const isHigh = i < 5; // First 5 leads are high priority
 
           let urgency, signalString, score;
 
-          if (isHighValue) {
+          if (isHigh) {
             urgency = "HIGH";
-            // LONG STRING FORMAT: Required to break the 69% score cap
-            signalString = `Added ${item} to cart; Viewed ${item} details; Asked for ${item} sizing; Requested restock notification for ${item}; Saved ${item} to wishlist; Used a promo code for ${item}`;
+            // EXACT STRING FORMAT FROM DATASET
+            signalString = `Added ${item} to cart; Viewed ${item} details; Asked for ${item} sizing; Requested restock notification for ${item}; Saved ${item} to wishlist`;
             score = 88 + Math.floor(Math.random() * 11); 
           } else {
-            urgency = Math.random() > 0.5 ? "MEDIUM" : "LOW";
-            signalString = `Clicked on ${item} ad; Liked ${item} photo; Browsed ${item} collection`;
-            score = 15 + Math.floor(Math.random() * 45); // Maxes out around 60
+            urgency = "LOW";
+            signalString = `Clicked on ${item} ad; Liked ${item} photo`;
+            score = 15 + Math.floor(Math.random() * 30);
           }
 
           return {
             id: `lead-${Date.now()}-${i}`,
             name: `Lead #${12500 + i}`,
             email: `customer${12500 + i}@email.com`,
-            location: ['New York', 'Austin', 'London', 'Paris', 'Toronto'][Math.floor(Math.random() * 5)],
+            location: ['New York', 'Austin', 'London'][Math.floor(Math.random() * 3)],
             score: score,
-            signals: signalString, // Sent as a formatted string
+            signals: signalString, // Passing the full string
             urgency: urgency,
-            platform: ['Instagram', 'Facebook', 'TikTok'][Math.floor(Math.random() * 3)],
+            platform: 'Instagram',
             timestamp: new Date().toISOString()
           };
         });
       } else {
-        // Real API Fetch
         const response = await axios.get(`${BACKEND_URL}/api/leads`);
         currentLeads = response.data;
       }
 
       setLeads(currentLeads);
-      
-      // Sync stats with the 80+ threshold
       setStats({
         total: currentLeads.length,
         high: currentLeads.filter(l => l.score >= 80).length,
@@ -73,7 +69,7 @@ export default function LeadDashboard({ userData }) {
       });
 
     } catch (error) {
-      console.error("Fetch Error:", error);
+      console.error("Fetch error:", error);
     } finally {
       setLoading(false);
     }
@@ -87,49 +83,30 @@ export default function LeadDashboard({ userData }) {
     return true;
   });
 
-  const exportToCSV = () => {
-    const headers = ['Name', 'Email', 'Location', 'Score', 'Urgency', 'Signals', 'Platform'];
-    const csvData = filteredLeads.map(lead => [
-      lead.name, lead.email, lead.location, lead.score, lead.urgency, lead.signals, lead.platform
-    ]);
-    const csvContent = [headers.join(','), ...csvData.map(row => row.map(cell => `"${cell}"`).join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `retail-crm-export.csv`;
-    a.click();
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
-          <p className="mt-4 text-[10px] font-bold uppercase tracking-widest text-gray-400">Analyzing Signals...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="p-10 text-center">Loading AI Pipeline...</div>;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      {/* KPI Section */}
+      {/* Metrics Row */}
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-4">
-        <MetricCard label="Incoming Leads" value={stats.total} color="text-black" />
-        <MetricCard label="Hot (Score 80+)" value={stats.high} color="text-red-600" />
-        <MetricCard label="Warm" value={stats.medium} color="text-orange-500" />
-        <MetricCard label="Cold" value={stats.low} color="text-gray-300" />
+        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">High Intent</p>
+          <p className="text-3xl font-light text-red-600">{stats.high}</p>
+        </div>
+        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Leads</p>
+          <p className="text-3xl font-light">{stats.total}</p>
+        </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 border-b border-gray-100 pb-6">
-        <div className="flex bg-gray-100 p-1 rounded-2xl">
+      {/* Filter Bar */}
+      <div className="mb-8 flex justify-between items-center border-b pb-6">
+        <div className="flex space-x-2 bg-gray-100 p-1 rounded-xl">
           {['all', 'high', 'medium', 'low'].map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-6 py-2 text-[10px] font-bold rounded-xl uppercase transition-all ${
+              className={`px-6 py-2 text-[10px] font-bold rounded-lg uppercase transition-all ${
                 filter === f ? 'bg-white text-black shadow-sm' : 'text-gray-400 hover:text-gray-600'
               }`}
             >
@@ -137,10 +114,7 @@ export default function LeadDashboard({ userData }) {
             </button>
           ))}
         </div>
-        <div className="flex space-x-2">
-          <button onClick={fetchLeads} className="px-6 py-2 text-[10px] font-bold border border-gray-200 rounded-xl hover:bg-gray-50 uppercase">Sync API</button>
-          <button onClick={exportToCSV} className="px-6 py-2 text-[10px] font-bold bg-black text-white rounded-xl hover:bg-zinc-800 uppercase">Export</button>
-        </div>
+        <button onClick={fetchLeads} className="px-6 py-2 text-[10px] font-bold bg-black text-white rounded-xl uppercase">Refresh</button>
       </div>
 
       {/* Grid */}
@@ -149,15 +123,6 @@ export default function LeadDashboard({ userData }) {
           <LeadCard key={lead.id} lead={lead} />
         ))}
       </div>
-    </div>
-  );
-}
-
-function MetricCard({ label, value, color }) {
-  return (
-    <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-      <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{label}</p>
-      <p className={`mt-2 text-4xl font-light ${color}`}>{value}</p>
     </div>
   );
 }
